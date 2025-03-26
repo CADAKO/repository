@@ -1,7 +1,7 @@
 #!/bin/bash
 
-TELEGRAM_BOT_TOKEN="6345307195:AAFoEL14wBdP2d--mHPqJxwTXfLR5wgKj5A"
-TELEGRAM_USER_ID="104085469"
+TELEGRAM_BOT_TOKEN="############################"
+TELEGRAM_USER_ID="############"
 
 URL="https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"
 TEXT="Project:+$CI_PROJECT_NAME%0A%0AJob name: $CI_JOB_NAME%0A%0AStatus:+$CI_JOB_STATUS"
