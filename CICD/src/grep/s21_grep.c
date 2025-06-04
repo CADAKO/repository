@@ -1,131 +1,168 @@
 #include "s21_grep.h"
 
-int main(int argc, char **argv) {
-  opt_t grep_options = {0};
+#include <ctype.h>
+#include <getopt.h>
+#include <regex.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {
+  int err = 1;
   if (argc > 2) {
-    char pattern[SIZE] = {0};
-    if (read_options(argc, argv, &grep_options, pattern)) {
-      int current_file = optind;
-      if (pattern[0] == 0) {
-        strcat(pattern, argv[optind]);
-        current_file++;
-      }
-      if (argv[current_file + 1] != NULL) grep_options.multiple_files = 1;
-      while (current_file < argc) {
-        grep_options.filename = argv[current_file];
-        read_file(argv, &grep_options, pattern);
-        current_file++;
-      }
+    struct flags flag = {0, 0, 0, 0, 0, 0, 0, 0};
+    int how_many_file = 0;
+    int how_many_string = 0;
+    // char *text[argc - 1];
+    // char *pattern[argc - 1];
+    char **text = malloc(argc * sizeof(char *));
+    char **pattern = malloc(argc * sizeof(char *));
+    getoptions(argc, argv, pattern, &how_many_string, text, &how_many_file,
+               &flag);
+
+    for (int now_filename_index = 0; now_filename_index < how_many_file;
+         now_filename_index++) {
+      file_scaner(text[now_filename_index], pattern, how_many_string, &flag);
     }
-  } else
-    printf(ERROR);
-  return 0;
-}
-
-int read_options(int argc, char **argv, opt_t *grep_options, char *pattern) {
-  int option, check = 1;
-  int pattern_count = 0;
-  static struct option long_options[] = {{0, 0, 0, 0}};
-  while ((option = getopt_long(argc, argv, "e:ivclnhsf:o", long_options,
-                               NULL)) != -1) {
-    if (option == 'e') {
-      grep_options->e = 1;
-      if (pattern_count) strcat(pattern, "|");
-      strcat(pattern, optarg);
-      pattern_count++;
-    } else if (option == 'i')
-      grep_options->i = 1;
-    else if (option == 'v')
-      grep_options->v = 1;
-    else if (option == 'c')
-      grep_options->c = 1;
-    else if (option == 'l')
-      grep_options->l = 1;
-    else if (option == 'n')
-      grep_options->n = 1;
-    else if (option == 'h')
-      grep_options->h = 1;
-    else if (option == 's')
-      grep_options->s = 1;
-    else if (option == 'f') {
-      grep_options->f = 1;
-      f_pattern(optarg, pattern);
-    } else if (option == 'o')
-      grep_options->o = 1;
-    else if (option == '?')
-      check = 0;
+    free(text);
+    free(pattern);
+    err = 0;
   }
-  return check;
+  return err;
 }
 
-void read_file(char **argv, opt_t *grep_options, char *pattern) {
-  grep_options->match_lines = 0;
-  grep_options->current_line = 1;
+int getoptions(int argcp, char **argvp, char **patternp, int *how_many_strings,
+               char **textp, int *how_many_files, struct flags *flagp) {
+  int err = 0;
+  int rez = 0;
+  while (((rez = getopt_long(argcp, argvp, "e:ivclnsh", NULL, NULL)) != -1) &&
+         err == 0) {
+    if (rez == 'e') {
+      flagp->e = 1;
+      patternp[*how_many_strings] = optarg;
+      *how_many_strings = *(how_many_strings) + 1;
+    }
 
-  FILE *fp = fopen(grep_options->filename, "r");
-  if (fp != NULL) {
-    char text[SIZE] = {0};
-    int cflags = REG_EXTENDED;
-    regex_t reg;
-    if (grep_options->i) cflags = REG_ICASE;
-    regcomp(&reg, pattern, cflags);
-    regmatch_t pmatch[1];
-    while (fgets(text, 4096, fp) != NULL) {
-      int reg_result = regexec(&reg, text, 1, pmatch, 0);
-      if (strchr(text, '\n') == NULL) strcat(text, "\n");
-      if ((reg_result == 0 && !grep_options->v) ||
-          (reg_result == REG_NOMATCH && grep_options->v)) {
-        grep_options->match = 1;
-        grep_options->match_lines++;
-        print_grep(grep_options, text);
-      }
-      if (grep_options->o && !grep_options->c && !grep_options->l &&
-          !grep_options->v) {
-        while (regexec(&reg, text, 1, pmatch, 0) == 0) {
-          for (int i = 0; i < pmatch->rm_eo; i++) {
-            if (i >= pmatch->rm_so) printf("%c", text[i]);
-            text[i] = 127;
-          }
-          printf("\n");
+    if (rez == 'i') flagp->i = 1;
+    if (rez == 'v') flagp->v = 1;
+    if (rez == 'c') flagp->c = 1;
+    if (rez == 'l') flagp->l = 1;
+    if (rez == 'n') flagp->n = 1;
+    if (rez == 's') flagp->s = 1;
+    if (rez == 'h') flagp->h = 1;
+    if (rez == '?') err = 1;
+  }
+  if (err == 0) {
+    if (flagp->e == 0) {
+      patternp[0] = argvp[optind];
+      (*how_many_strings)++;
+      optind++;
+    }
+    for (*how_many_files = 0; optind < argcp; (*how_many_files)++) {
+      textp[*how_many_files] = argvp[optind];
+      optind++;
+    }
+    if (*how_many_files == 1) flagp->h = 1;
+  }
+  return err;
+}
+
+void comp_find(char *buffer, char **patterns, int how_many_strings,
+               int *strnumber, int *check, struct flags *flagp) {
+  (*strnumber)++;
+  int cflags = REG_EXTENDED | REG_NEWLINE;
+  regmatch_t pmatch[1];
+  const size_t nmatch = 1;
+  regex_t reg;
+  if (flagp->i == 1) {
+    cflags = REG_EXTENDED | REG_ICASE | REG_NEWLINE;
+  }
+  for (int i = 0; i < how_many_strings; i++) {
+    int status;
+    regcomp(&reg, patterns[i], cflags);
+    status = regexec(&reg, buffer, nmatch, pmatch, 0);
+    if (status == 0) *check = 1;
+    regfree(&reg);
+  }
+}
+
+void c_flag_format(struct flags *flagp, int compare_count, int strnumber,
+                   char *filename) {
+  if (flagp->h == 0) printf("%s:", filename);
+  if (flagp->l == 0) {
+    if (flagp->v == 1) {
+      printf("%d\n", strnumber - compare_count);
+    } else {
+      printf("%d\n", compare_count);
+    }
+  } else {  // flagl==1
+    if (flagp->v == 1) {
+      if (strnumber != compare_count)
+        printf("1\n");
+      else
+        printf("0\n");
+    } else {
+      if (compare_count)
+        printf("1\n");
+      else
+        printf("0\n");
+    }
+  }
+}
+
+int file_scaner(char *filename, char **patterns, int how_many_strings,
+                struct flags *flagp) {
+  int err = 0;
+  FILE *fp;
+  fp = fopen(filename, "r");
+  if (fp == NULL) {
+    if (flagp->s == 0) {
+      fprintf(stderr, "grep: %s: No such file or directory\n", filename);
+    }
+    err = 1;
+  }
+  if (err == 0) {
+    int strnumber = 0;
+    int compare_count = 0;
+    while (!feof(fp)) {
+      char buffer[4096] = "";
+      int check = 0;
+      fgets(buffer, 4096, fp);
+      if (buffer[0] != 0) {
+        comp_find(buffer, patterns, how_many_strings, &strnumber, &check,
+                  flagp);
+        if (check == 1) compare_count++;
+        if (flagp->v == 1) {
+          if (check == 1)
+            check = 0;
+          else
+            check = 1;
+        }
+        if (flagp->c == 0 && flagp->l == 0 && check == 1) {
+          if (flagp->h == 0) printf("%s:", filename);
+          if (flagp->n == 1) printf("%d:", strnumber);
+          printf("%s", buffer);
+          if (buffer[strlen(buffer) - 1] != '\n') printf("\n");
         }
       }
-      grep_options->current_line++;
+    }  // while
+#ifdef __APPLE__
+    if (flagp->c) {
+      c_flag_format(flagp, compare_count, strnumber, filename);
     }
-    if (grep_options->l && grep_options->match_lines)
-      printf("%s\n", grep_options->filename);
-    if (grep_options->c) {
-      if (grep_options->multiple_files) printf("%s:", grep_options->filename);
-      printf("%d\n", grep_options->match_lines);
+#elif __linux__
+    if (flagp->c && flagp->l == 0) {
+      c_flag_format(flagp, compare_count, strnumber, filename);
     }
-    regfree(&reg);
-    fclose(fp);
-  } else if (!grep_options->s)
-    fprintf(stderr, "%s: %s: No such file or directory\n", argv[0],
-            grep_options->filename);
-}
+#endif
 
-void print_grep(opt_t *grep_options, char *text) {
-  if (grep_options->multiple_files && !grep_options->h && !grep_options->l &&
-      !grep_options->c)
-    printf("%s:", grep_options->filename);
-  if (grep_options->n) printf("%d:", grep_options->current_line);
-  if (grep_options->match && !grep_options->c && !grep_options->l &&
-      !grep_options->o) {
-    printf("%s", text);
-  }
-}
-
-void f_pattern(char *file_pattern, char *pattern) {
-  FILE *fp = fopen(file_pattern, "r");
-  if (fp != NULL) {
-    int i = 0;
-    int curr_ch;
-    while ((curr_ch = getc(fp)) != EOF) {
-      if (curr_ch == '\n') curr_ch = '|';
-      pattern[i] = (char)curr_ch;
-      i++;
+    if (flagp->l) {
+      if ((flagp->v == 0 && compare_count > 0) ||
+          ((flagp->v == 1 && compare_count != strnumber)))
+        printf("%s\n", filename);
     }
-    if (pattern[i - 1] == '|') pattern[i - 1] = '\0';
     fclose(fp);
   }
+  return err;
 }

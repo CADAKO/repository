@@ -1,32 +1,27 @@
-#ifndef GREP_H
-#define GREP_H
-#include <getopt.h>
-#include <regex.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#ifndef S21_GREP_H
+#define S21_GREP_H
 
-#define SIZE 4096
-#define ERROR                                                              \
-  "usage: grep [-abcDEFGHhIiJLlmnOoqRSsUVvwxZ] [-A num] [-B num] "         \
-  "[-C[num]]\n"                                                            \
-  "        [-e pattern] [-f file] [--binary-files=value] [--color=when]\n" \
-  "        [--context[=num]] [--directories=action] [--label] "            \
-  "[--line-buffered]\n"                                                    \
-  "        [--null] [pattern] [file ...]\n"
+struct flags {
+  unsigned int e : 1;
+  unsigned int i : 1;
+  unsigned int v : 1;
+  unsigned int c : 1;
+  unsigned int l : 1;
+  unsigned int n : 1;
+  unsigned int s : 1;
+  unsigned int h : 1;
+};
 
-typedef struct opt {
-  int e, i, v, c, l, n, h, s, f, o;
-  int current_line;
-  int multiple_files;
-  int match;
-  int match_lines;
-  char *filename;
-} opt_t;
+int getoptions(int argcp, char **argvp, char **patternp, int *how_many_strings,
+               char **textp, int *how_many_files, struct flags *flagp);
 
-int read_options(int argc, char **argv, opt_t *grep_options, char *pattern);
-void read_file(char **argv, opt_t *grep_options, char *pattern);
-void print_grep(opt_t *grep_options, char *text);
-void f_pattern(char *file_pattern, char *pattern);
+int file_scaner(char *filename, char **patterns, int how_many_strings,
+                struct flags *flag);
+
+void comp_find(char *buffer, char **patterns, int how_many_strings,
+               int *strnumber, int *check, struct flags *flagp);
+
+void c_flag_format(struct flags *flagp, int compare_count, int strnumber,
+                   char *filename);
 
 #endif

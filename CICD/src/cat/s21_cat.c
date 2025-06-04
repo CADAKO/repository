@@ -1,94 +1,146 @@
 #include "s21_cat.h"
 
-int main(int argc, char **argv) {
-  opt_t cat_option = {0};
-  if (read_options(argc, argv, &cat_option)) {
-    read_file(argc, argv, &cat_option);
-  }
-  return 0;
-}
+#include <ctype.h>
+#include <getopt.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-int read_options(int argc, char **argv, opt_t *cat_option) {
-  int option, optCheck = 1;
-  const struct option long_options[] = {{"number-nonblank", 0, 0, 'b'},
-                                        {"number", 0, 0, 'n'},
-                                        {"squeeze-blank", 0, 0, 's'},
-                                        {0, 0, 0, 0}};
+int main(int argc, char *argv[]) {
+  if (argc > 1) {
+    char *short_flags = "beEnstTv";
+    struct option long_flags[] = {{"number-nonblank", no_argument, NULL, 'b'},
+                                  {"number", no_argument, NULL, 'n'},
+                                  {"squeeze-blank", no_argument, NULL, 's'},
+                                  {NULL, 0, NULL, 0}};
+    int opt = 0;
+    while ((opt = getopt_long(argc, argv, short_flags, long_flags, NULL)) !=
+           -1) {
+      if (opt == 'b') flag.b = 1;
+      if (opt == 'v') flag.v = 1;
+      if (opt == 'e') {
+        flag.e = 1;
+        flag.v = 1;
+      }
+      if (opt == 'E') flag.e = 1;
+      if (opt == 'n') flag.n = 1;
+      if (opt == 's') flag.s = 1;
+      if (opt == 't') {
+        flag.t = 1;
+        flag.v = 1;
+      }
+      if (opt == 'T') flag.t = 1;
+    }
 
-  while ((option = getopt_long(argc, argv, "+benstvET", long_options, NULL)) !=
-         -1) {
-    if (option == 'b')
-      cat_option->b = 1;
-    else if (option == 'e') {
-      cat_option->e = 1;
-      cat_option->v = 1;
-    } else if (option == 'n')
-      cat_option->n = 1;
-    else if (option == 's')
-      cat_option->s = 1;
-    else if (option == 't') {
-      cat_option->t = 1;
-      cat_option->v = 1;
-    } else if (option == 'E')
-      cat_option->e = 1;
-    else if (option == 'T')
-      cat_option->t = 1;
-    else if (option == 'v')
-      cat_option->v = 1;
-    else {
-      optCheck = 0;
+    int now_filename_index = optind;
+    int line_counter = 1;
+    int blank_line = 0;
+    while (now_filename_index < argc) {
+      reader(now_filename_index, argv, &flag, &line_counter, &blank_line);
+      now_filename_index++;
     }
   }
-  return optCheck;
+  return (0);
 }
 
-void read_file(int argc, char **argv, opt_t *cat_option) {
-  int currentFile = optind;
-  int counter, blank_string;
-  while (currentFile < argc) {
-    if (argc > 1) {
-      FILE *fp = fopen(argv[currentFile], "r");
-      if (fp != NULL) {
-        counter = 1;
-        blank_string = 0;
-        char curr_ch, prev_ch = '\n';
-        while ((curr_ch = getc(fp)) != EOF) {
-          if (cat_option->s && prev_ch == '\n' && curr_ch == '\n') {
-            blank_string++;
-            if (blank_string > 1) continue;
-          } else
-            blank_string = 0;
-          if (cat_option->b && prev_ch == '\n' && curr_ch != '\n') {
-            printf("%6d\t", counter);
-            counter++;
-          }
-          if (cat_option->n && prev_ch == '\n' && cat_option->b == 0) {
-            printf("%6d\t", counter);
-            counter++;
-          }
-          if (cat_option->e && curr_ch == '\n') printf("$");
-          if (cat_option->t && curr_ch == '\t') {
-            printf("^");
-            curr_ch = 'I';
-          }
-          if (cat_option->v) {
-            if ((curr_ch >= 0 && curr_ch <= 31) && curr_ch != '\n' &&
-                curr_ch != '\t') {
-              printf("^");
-              curr_ch += 64;
-            } else if (curr_ch == 127) {
-              printf("^");
-              curr_ch -= 64;
-            }
-          }
-          prev_ch = curr_ch;
-          printf("%c", curr_ch);
+void flag_s_format(int current_char, int last_char, int **blank_line,
+                   int *skip_print_flag) {
+  if (current_char == 10 && (last_char == 10 || last_char == EOF)) {
+    (**blank_line)++;
+  } else {
+    **blank_line = 0;
+  }
+  if (**blank_line > 1) {
+    *skip_print_flag = 1;
+  }
+}
+
+void flag_b_format(int current_char, int last_char, int **line_counter) {
+  if ((**line_counter == 1) && (current_char != 10)) {
+    printf("%6d\t", **line_counter);
+    (**line_counter)++;
+  } else if ((current_char != 10) && (last_char == 10)) {
+    printf("%6d\t", **line_counter);
+    (**line_counter)++;
+  }
+}
+
+void flag_v_format(int current_char, int last_char, int *skip_print_flag) {
+  if (current_char >= 0 && current_char < 32 && current_char != 10 &&
+      current_char != 9 && current_char != EOF) {
+    *skip_print_flag = 1;
+  }
+  if (last_char >= 0 && last_char < 32 && last_char != 10 && last_char != 9 &&
+      last_char != EOF) {
+    printf("^%c", last_char + 64);
+  }
+  if (current_char == 127) {
+    *skip_print_flag = 1;
+  }
+  if (last_char == 127) {
+    printf("^%c", 63);
+  }
+}
+
+void flag_n_format(int last_char, int **blank_line, int **line_counter) {
+  if (((**line_counter == 1) || (last_char == 10) ||
+       (**line_counter != 1 && last_char == EOF)) &&
+      **blank_line <= 1) {
+    printf("%6d\t", **line_counter);
+    (**line_counter)++;
+  }
+}
+
+int reader(int filename_index, char **argv1, struct flags *flag,
+           int *line_counter, int *blank_line) {
+  int err = 0;
+  FILE *fp;
+  fp = fopen(argv1[filename_index], "r");
+  if (fp == NULL) {
+    fprintf(stderr, "cat: %s: No such file or directory\n",
+            argv1[filename_index]);
+    err = -1;
+  }
+  if (err == 0) {
+#ifdef __APPLE__
+    *line_counter = 1;
+#endif
+    int last_char;
+    int current_char;
+#ifdef __APPLE__
+    *blank_line = 0;
+#endif
+    current_char = fgetc(fp);
+    last_char = EOF;
+    while (current_char != EOF) {
+      int skip_print_flag = 0;
+      if (flag->s == 1) {
+        flag_s_format(current_char, last_char, &blank_line, &skip_print_flag);
+      }
+      if (flag->b == 1) {
+        flag_b_format(current_char, last_char, &line_counter);
+      } else if (flag->n == 1) {
+        flag_n_format(last_char, &blank_line, &line_counter);
+      }
+      if (flag->t == 1) {
+        if (current_char == 9) {
+          printf("%c", 94);
+          printf("%c", 73);
+          skip_print_flag = 1;
         }
-        fclose(fp);
-      } else
-        fprintf(stderr, "%s: %s: No such file or directory\n", argv[0],
-                argv[currentFile]);
-      currentFile++;
+      }
+      if (flag->e == 1) {
+        if (current_char == 10 && (*blank_line) < 2) printf("$");
+      }
+      if (flag->v == 1) {
+        flag_v_format(current_char, last_char, &skip_print_flag);
+      }
+      last_char = current_char;
+      current_char = fgetc(fp);
+      if (skip_print_flag == 0) printf("%c", last_char);
     }
+    fclose(fp);
   }
+  return err;
 }
