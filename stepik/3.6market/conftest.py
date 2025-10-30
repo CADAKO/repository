@@ -19,7 +19,7 @@ def pytest_addoption(parser):
         "--language",
         action="store",
         default="ru",
-        help="Choose user language: es, en, ru, de"
+        help="Choose user language: es, en, ru, de, fr"
     )
     parser.addoption(
         "--headless",
@@ -77,4 +77,5 @@ def browser(request):
     yield driver
 
     driver.quit()
+
     
