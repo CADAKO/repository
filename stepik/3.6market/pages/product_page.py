@@ -15,7 +15,7 @@ class ProductPage:
     def find_button(self):
         try:
             wait = WebDriverWait(self.driver, 5)
-            wait.until(EC.presence_of_all_elements_located(self.ADD_TO_BSKT_BTN))
+            wait.until(EC.EC.visibility_of_all_elements_located(self.ADD_TO_BSKT_BTN))
             buttons = self.driver.find_elements(*self.ADD_TO_BSKT_BTN)
             return len(buttons)
         except:
