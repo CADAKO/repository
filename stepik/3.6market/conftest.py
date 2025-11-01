@@ -5,7 +5,7 @@ from selenium.webdriver.firefox.options import Options as FirefoxOptions
 
 @pytest.fixture(scope="function")
 def url():
-    return "https://selenium1py.pythonanywhere.com/ru/catalogue/coders-at-work_207/"
+    return "https://selenium1py.pythonanywhere.com/catalogue/coders-at-work_207/"
 
 def pytest_addoption(parser):
     """Добавление опций командной строки pytest."""
@@ -79,3 +79,4 @@ def browser(request):
     driver.quit()
 
     
+
